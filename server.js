@@ -11,7 +11,7 @@ const INVALID_ROLE_CODE = 4400;
 export const FORBIDDEN_ORIGIN_CODE = 4403;
 export const HEARTBEAT_MS = 30000;
 const RELAYED_TYPES = new Set(['offer', 'answer', 'candidate']);
-const PAGES = { '/camara': 'camara.html', '/monitor': 'monitor.html' };
+const PAGES = { '/': 'index.html', '/camara': 'camara.html', '/monitor': 'monitor.html' };
 const ASSET_PATTERN = /^\/([a-z-]+\.(?:js|css))$/;
 const CONTENT_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -40,7 +40,16 @@ function reply(res, status, body = '') {
   res.end(body);
 }
 
-async function handleRequest(req, res) {
+function replyStatus(req, res, room) {
+  res.writeHead(200, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  });
+  res.end(req.method === 'HEAD' ? undefined : JSON.stringify(room.status()));
+}
+
+async function handleRequest(req, res, room) {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     reply(res, 405, 'method not allowed');
     return;
@@ -52,6 +61,10 @@ async function handleRequest(req, res) {
   }
   if (pathname === '/healthz') {
     reply(res, 200, 'ok');
+    return;
+  }
+  if (pathname === '/api/status') {
+    replyStatus(req, res, room);
     return;
   }
   const file = resolveFile(pathname);
@@ -120,7 +133,7 @@ function startHeartbeat(wss, intervalMs) {
 export function createMonitorServer({ heartbeatMs = HEARTBEAT_MS } = {}) {
   const room = createRoom();
   const server = http.createServer((req, res) => {
-    handleRequest(req, res).catch((err) => {
+    handleRequest(req, res, room).catch((err) => {
       console.error('error inesperado', err);
       reply(res, 500, 'internal error');
     });

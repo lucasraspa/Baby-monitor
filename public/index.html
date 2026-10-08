@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Baby monitor</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="home">
+  <main>
+    <h1>Baby monitor</h1>
+    <ul class="status-list">
+      <li><span id="camera-dot" class="dot" data-state="unknown"></span><span id="camera-text">Comprobando…</span></li>
+      <li><span id="monitor-dot" class="dot" data-state="unknown"></span><span id="monitor-text">Comprobando…</span></li>
+    </ul>
+    <div class="choice">
+      <a class="button" href="/camara">Soy la cámara (iPad)</a>
+      <p id="camera-warning" class="warn" hidden></p>
+    </div>
+    <div class="choice">
+      <a class="button" href="/monitor">Soy el monitor (iPhone)</a>
+      <p id="monitor-warning" class="warn" hidden></p>
+    </div>
+  </main>
+  <script type="module" src="/home.js"></script>
+</body>
+</html>

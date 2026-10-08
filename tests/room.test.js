@@ -108,3 +108,40 @@ test('joining with an unknown role throws', () => {
 
   assert.throws(() => room.join('abuela', fakeClient()), /rol inválido/);
 });
+
+test('status reports no roles in an empty room', () => {
+  assert.deepEqual(createRoom().status(), { camara: false, monitor: false });
+});
+
+test('status reports a role after it joins and clears it after it leaves', () => {
+  const room = createRoom();
+  const camara = fakeClient();
+  const monitor = fakeClient();
+
+  room.join('camara', camara);
+  assert.deepEqual(room.status(), { camara: true, monitor: false });
+  room.join('monitor', monitor);
+  assert.deepEqual(room.status(), { camara: true, monitor: true });
+  room.leave('camara', camara);
+  assert.deepEqual(room.status(), { camara: false, monitor: true });
+});
+
+test('status stays true after a replacement and ignores the replaced client leaving', () => {
+  const room = createRoom();
+  const first = fakeClient();
+  const second = fakeClient();
+  room.join('camara', first);
+  room.join('camara', second);
+  room.leave('camara', first);
+
+  assert.deepEqual(room.status(), { camara: true, monitor: false });
+});
+
+test('status returns a new object each call', () => {
+  const room = createRoom();
+  const a = room.status();
+  a.camara = true;
+
+  assert.notEqual(room.status(), a);
+  assert.deepEqual(room.status(), { camara: false, monitor: false });
+});

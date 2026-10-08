@@ -67,8 +67,15 @@ async function fixture(t, serverOptions = {}) {
 function get(port, path, method = 'GET') {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path, method }, (res) => {
-      res.resume();
-      res.on('end', () => resolve({ status: res.statusCode, type: res.headers['content-type'], nosniff: res.headers['x-content-type-options'] }));
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => resolve({
+        status: res.statusCode,
+        type: res.headers['content-type'],
+        nosniff: res.headers['x-content-type-options'],
+        cache: res.headers['cache-control'],
+        body: Buffer.concat(chunks).toString(),
+      }));
     });
     req.on('error', reject);
     req.end();
@@ -84,10 +91,64 @@ test('healthz answers 200', async (t) => {
 test('unknown paths and traversal attempts answer 404', async (t) => {
   const { port } = await fixture(t);
 
-  for (const path of ['/', '/server.js', '/lib/room.js', '/../server.js', '/%2e%2e/server.js', '/package.json',
+  for (const path of ['/server.js', '/lib/room.js', '/../server.js', '/%2e%2e/server.js', '/package.json',
     '/public/logic.js', '/..%2Fpublic%2Flogic.js', '/public/../public/logic.js']) {
     assert.equal((await get(port, path)).status, 404, path);
   }
+});
+
+test('root serves the landing page as html', async (t) => {
+  const { port } = await fixture(t);
+  const res = await get(port, '/');
+
+  assert.equal(res.status, 200);
+  assert.equal(res.type, 'text/html; charset=utf-8');
+  assert.equal(res.cache, 'no-store');
+});
+
+test('home.js is served as javascript', async (t) => {
+  const { port } = await fixture(t);
+  const res = await get(port, '/home.js');
+
+  assert.equal(res.status, 200);
+  assert.equal(res.type, 'text/javascript; charset=utf-8');
+});
+
+test('api/status answers json with no-store and nothing but the two flags', async (t) => {
+  const { port } = await fixture(t);
+  const res = await get(port, '/api/status');
+
+  assert.equal(res.status, 200);
+  assert.equal(res.type, 'application/json; charset=utf-8');
+  assert.equal(res.cache, 'no-store');
+  assert.equal(res.nosniff, 'nosniff');
+  assert.deepEqual(JSON.parse(res.body), { camara: false, monitor: false });
+  assert.equal((await get(port, '/api/status', 'HEAD')).status, 200);
+});
+
+test('api/status follows camera and monitor joining and leaving', async (t) => {
+  const f = await fixture(t);
+  const status = async () => JSON.parse((await get(f.port, '/api/status')).body);
+
+  const camara = f.client('camara');
+  await camara.opened;
+  await camara.next();
+  assert.deepEqual(await status(), { camara: true, monitor: false });
+
+  const monitor = f.client('monitor');
+  await monitor.opened;
+  await monitor.next();
+  assert.deepEqual(await status(), { camara: true, monitor: true });
+
+  camara.ws.close();
+  assert.deepEqual(await monitor.next(), { type: 'peer-left' });
+  assert.deepEqual(await status(), { camara: false, monitor: true });
+});
+
+test('api/status rejects POST with 405', async (t) => {
+  const { port } = await fixture(t);
+
+  assert.equal((await get(port, '/api/status', 'POST')).status, 405);
 });
 
 test('non GET methods answer 405', async (t) => {

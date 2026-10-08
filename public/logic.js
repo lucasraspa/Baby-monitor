@@ -2,6 +2,8 @@ export const STALL_THRESHOLD_MS = 6000;
 export const LOST_AFTER_MS = 10000;
 export const RENEGOTIATE_AFTER_DISCONNECT_MS = 3000;
 
+const NO_SERVER_TEXT = 'Sin conexión con el servidor';
+
 const NO_RECONNECT_CODES = [4000, 4400];
 
 export function shouldReconnect(closeCode) {
@@ -49,4 +51,28 @@ export function renegotiationDelayMs(connectionState) {
     return RENEGOTIATE_AFTER_DISCONNECT_MS;
   }
   return null;
+}
+
+function describeMonitorWarning(status) {
+  if (status.monitor) {
+    return 'Ya hay un monitor conectado. Si entras, lo sustituirás.';
+  }
+  return status.camara ? '' : 'Aún no hay cámara: se conectará solo cuando aparezca.';
+}
+
+export function describeStatus(status) {
+  if (status === null) {
+    return {
+      cameraText: NO_SERVER_TEXT, cameraDot: 'unknown', cameraWarning: '',
+      monitorText: NO_SERVER_TEXT, monitorDot: 'unknown', monitorWarning: '',
+    };
+  }
+  return {
+    cameraText: status.camara ? 'Cámara: activa' : 'Cámara: sin cámara',
+    cameraDot: status.camara ? 'on' : 'off',
+    cameraWarning: status.camara ? 'Ya hay una cámara conectada. Si entras, la sustituirás.' : '',
+    monitorText: status.monitor ? 'Monitor: activo' : 'Monitor: sin monitor',
+    monitorDot: status.monitor ? 'on' : 'off',
+    monitorWarning: describeMonitorWarning(status),
+  };
 }

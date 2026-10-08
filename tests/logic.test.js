@@ -10,6 +10,7 @@ import {
   classify,
   describeMediaError,
   renegotiationDelayMs,
+  describeStatus,
   RENEGOTIATE_AFTER_DISCONNECT_MS,
 } from '../public/logic.js';
 
@@ -86,4 +87,52 @@ test('trackFrames treats a decreasing counter as a reset and progress', () => {
 
   assert.deepEqual(reset, { frames: 3, advancedAt: 9000 });
   assert.deepEqual(old, { frames: 5000, advancedAt: 100 });
+});
+
+test('describeStatus without a server answer is unknown for both roles', () => {
+  const unknown = 'Sin conexión con el servidor';
+
+  assert.deepEqual(describeStatus(null), {
+    cameraText: unknown, cameraDot: 'unknown', cameraWarning: '',
+    monitorText: unknown, monitorDot: 'unknown', monitorWarning: '',
+  });
+});
+
+test('describeStatus with an active camera warns before replacing it', () => {
+  const d = describeStatus({ camara: true, monitor: false });
+
+  assert.equal(d.cameraText, 'Cámara: activa');
+  assert.equal(d.cameraDot, 'on');
+  assert.equal(d.cameraWarning, 'Ya hay una cámara conectada. Si entras, la sustituirás.');
+  assert.equal(d.monitorText, 'Monitor: sin monitor');
+  assert.equal(d.monitorDot, 'off');
+  assert.equal(d.monitorWarning, '');
+});
+
+test('describeStatus with no camera tells the monitor it will connect later', () => {
+  const d = describeStatus({ camara: false, monitor: false });
+
+  assert.equal(d.cameraText, 'Cámara: sin cámara');
+  assert.equal(d.cameraDot, 'off');
+  assert.equal(d.cameraWarning, '');
+  assert.equal(d.monitorWarning, 'Aún no hay cámara: se conectará solo cuando aparezca.');
+});
+
+test('describeStatus with an active monitor warns about replacing it', () => {
+  const d = describeStatus({ camara: true, monitor: true });
+
+  assert.equal(d.monitorText, 'Monitor: activo');
+  assert.equal(d.monitorDot, 'on');
+  assert.equal(d.monitorWarning, 'Ya hay un monitor conectado. Si entras, lo sustituirás.');
+});
+
+test('describeStatus gives the replace warning priority over the no-camera hint', () => {
+  const d = describeStatus({ camara: false, monitor: true });
+
+  assert.equal(d.monitorWarning, 'Ya hay un monitor conectado. Si entras, lo sustituirás.');
+  assert.equal(d.cameraDot, 'off');
+});
+
+test('describeStatus returns a new object each call', () => {
+  assert.notEqual(describeStatus(null), describeStatus(null));
 });
