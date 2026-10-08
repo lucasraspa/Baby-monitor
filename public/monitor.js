@@ -28,6 +28,8 @@ let alarmTimer = null;
 let tickTimer = null;
 let wakeLock = null;
 let alarmSilenced = false;
+let beepInFlight = false;
+let playPending = false;
 let displaced = false;
 let everLive = false;
 let downSince = null;
@@ -51,20 +53,25 @@ async function resumeAudio() {
 }
 
 async function beep() {
-  if (!audioCtx || alarmSilenced) {
+  if (!audioCtx || alarmSilenced || beepInFlight) {
     return;
   }
-  await resumeAudio();
-  if (audioCtx.state !== 'running') {
-    return;
+  beepInFlight = true;
+  try {
+    await resumeAudio();
+    if (alarmTimer === null || alarmSilenced || audioCtx.state !== 'running') {
+      return;
+    }
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.value = ALARM_BEEP_HZ;
+    gain.gain.value = ALARM_BEEP_GAIN;
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + ALARM_BEEP_SECONDS);
+  } finally {
+    beepInFlight = false;
   }
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.frequency.value = ALARM_BEEP_HZ;
-  gain.gain.value = ALARM_BEEP_GAIN;
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + ALARM_BEEP_SECONDS);
 }
 
 function setAlarm(active) {
@@ -118,7 +125,11 @@ async function tick() {
   if (frames !== null) {
     frameState = trackFrames(frameState, frames, now);
   }
-  const flowing = frames !== null && frames > 0 && !isStalled(frameState, now) && !el('video').paused;
+  const advancing = frames !== null && frames > 0 && !isStalled(frameState, now);
+  if (advancing && el('video').paused) {
+    playVideo();
+  }
+  const flowing = advancing && !el('video').paused;
   if (flowing) {
     everLive = true;
     downSince = null;
@@ -139,10 +150,14 @@ function handleDisplaced() {
 }
 
 function playVideo() {
+  if (playPending) {
+    return;
+  }
+  playPending = true;
   el('video').play().then(
     () => { el('overlay').hidden = true; },
     () => { el('overlay').hidden = false; },
-  );
+  ).finally(() => { playPending = false; });
 }
 
 async function handleOffer(message) {
@@ -235,6 +250,11 @@ el('mute').addEventListener('click', () => {
   const video = el('video');
   video.muted = !video.muted;
   el('mute').textContent = video.muted ? '🔇' : '🔊';
+});
+el('video').addEventListener('pause', () => {
+  if (signal && !displaced) {
+    playVideo();
+  }
 });
 el('audio-warning').addEventListener('click', resumeAudio);
 el('alarm-off').addEventListener('click', () => {
