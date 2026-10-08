@@ -6,6 +6,8 @@ const MEDIA_CONSTRAINTS = {
   audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
 };
 
+const REPLACED_CLOSE_CODE = 4000;
+
 const el = (id) => document.getElementById(id);
 const setStatus = (text) => { el('status').textContent = text; };
 
@@ -13,6 +15,7 @@ let stream = null;
 let pc = null;
 let signal = null;
 let retryTimer = null;
+let wakeLock = null;
 
 async function acquireWakeLock() {
   if (!('wakeLock' in navigator)) {
@@ -20,7 +23,13 @@ async function acquireWakeLock() {
     return;
   }
   try {
-    await navigator.wakeLock.request('screen');
+    const sentinel = await navigator.wakeLock.request('screen');
+    wakeLock = sentinel;
+    sentinel.addEventListener('release', () => {
+      if (document.visibilityState === 'visible' && stream) {
+        acquireWakeLock();
+      }
+    });
   } catch (err) {
     console.error('wakeLock', err);
     el('wakewarn').hidden = false;
@@ -36,15 +45,18 @@ function closePeer() {
 
 async function startOffer() {
   closePeer();
-  pc = new RTCPeerConnection({ iceServers: [] });
-  const peer = pc;
-  stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
+  if (!stream) {
+    return;
+  }
+  const peer = new RTCPeerConnection({ iceServers: [] });
+  pc = peer;
+  stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+  peer.onicecandidate = (event) => {
+    if (event.candidate && peer === pc) {
       signal.send({ type: 'candidate', candidate: event.candidate });
     }
   };
-  pc.onconnectionstatechange = () => {
+  peer.onconnectionstatechange = () => {
     if (peer !== pc) {
       return;
     }
@@ -56,12 +68,19 @@ async function startOffer() {
       retryTimer = setTimeout(() => startOffer().catch((err) => console.error('renegociación', err)), delay);
     }
   };
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  signal.send({ type: 'offer', sdp: pc.localDescription });
+  const offer = await peer.createOffer();
+  if (peer !== pc) {
+    return;
+  }
+  await peer.setLocalDescription(offer);
+  if (peer !== pc) {
+    return;
+  }
+  signal.send({ type: 'offer', sdp: peer.localDescription });
 }
 
 async function handleMessage(message) {
+  const peer = pc;
   switch (message.type) {
     case 'welcome':
       if (message.peer) {
@@ -78,12 +97,23 @@ async function handleMessage(message) {
       setStatus('Esperando monitor…');
       break;
     case 'answer':
-      await pc?.setRemoteDescription(message.sdp);
+      await peer?.setRemoteDescription(message.sdp);
       break;
     case 'candidate':
-      await pc?.addIceCandidate(message.candidate);
+      await peer?.addIceCandidate(message.candidate);
       break;
   }
+}
+
+function handleSignalClose(code) {
+  if (code !== REPLACED_CLOSE_CODE) {
+    setStatus('Sin conexión con el servidor…');
+    return;
+  }
+  closePeer();
+  stream?.getTracks().forEach((track) => track.stop());
+  stream = null;
+  setStatus('Otra cámara está activa — recarga para recuperarla');
 }
 
 async function start() {
@@ -101,11 +131,11 @@ async function start() {
   el('intro').hidden = true;
   el('running').hidden = false;
   await acquireWakeLock();
-  signal = connectSignal('camara', { onMessage: serialize(handleMessage) });
+  signal = connectSignal('camara', { onMessage: serialize(handleMessage), onClose: handleSignalClose });
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && stream) {
+  if (document.visibilityState === 'visible' && stream && (!wakeLock || wakeLock.released)) {
     acquireWakeLock();
   }
 });

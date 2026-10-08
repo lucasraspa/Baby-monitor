@@ -22,9 +22,9 @@ body.camara video { width: 40vw; opacity: .35; border-radius: .5rem; }
 
 /* monitor: vídeo a pantalla completa con barra de estado */
 body.monitor main { justify-content: flex-start; padding: 0; gap: 0; }
-#stage { position: relative; width: 100%; height: 100vh; display: flex; align-items: center; justify-content: center; }
+#stage { position: relative; width: 100%; height: 100vh; height: 100dvh; display: flex; align-items: center; justify-content: center; }
 #stage video { width: 100%; height: 100%; object-fit: contain; }
-#bar { position: absolute; top: env(safe-area-inset-top); left: 0; right: 0; display: flex; align-items: center; gap: .6rem; padding: .6rem 1rem; background: rgba(0,0,0,.55); }
+#bar { flex-wrap: wrap; position: absolute; top: env(safe-area-inset-top); left: 0; right: 0; display: flex; align-items: center; gap: .6rem; padding: .6rem 1rem; background: rgba(0,0,0,.55); }
 #dot { width: 1rem; height: 1rem; border-radius: 50%; background: var(--muted); }
 body[data-status="live"] #dot { background: var(--live); }
 body[data-status="reconnecting"] #dot, body[data-status="waiting"] #dot { background: var(--warn); }
@@ -33,3 +33,4 @@ body[data-status="lost"] #dot { background: var(--lost); }
 #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); }
 body[data-status="lost"] #stage { animation: flash 1s steps(2, start) infinite; }
 @keyframes flash { 50% { box-shadow: inset 0 0 0 .6rem var(--lost); background: #300; } }
+#wakewarn-monitor { position: absolute; top: calc(env(safe-area-inset-top) + 3.5rem); left: 0; right: 0; margin: 0; padding: .4rem 1rem; background: rgba(0,0,0,.55); }
