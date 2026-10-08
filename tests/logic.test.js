@@ -9,6 +9,8 @@ import {
   isStalled,
   classify,
   describeMediaError,
+  renegotiationDelayMs,
+  RENEGOTIATE_AFTER_DISCONNECT_MS,
 } from '../public/logic.js';
 
 test('shouldReconnect is false for replaced and invalid-role closes only', () => {
@@ -60,4 +62,19 @@ test('describeMediaError gives actionable text for denied and missing devices', 
   assert.match(describeMediaError({ name: 'NotAllowedError' }), /permiso/i);
   assert.match(describeMediaError({ name: 'NotFoundError' }), /no se encontr/i);
   assert.match(describeMediaError({ name: 'Raro', message: 'boom' }), /boom/);
+});
+
+test('renegotiationDelayMs retries immediately on failed', () => {
+  assert.equal(renegotiationDelayMs('failed'), 0);
+});
+
+test('renegotiationDelayMs waits before retrying on disconnected', () => {
+  assert.equal(RENEGOTIATE_AFTER_DISCONNECT_MS, 3000);
+  assert.equal(renegotiationDelayMs('disconnected'), RENEGOTIATE_AFTER_DISCONNECT_MS);
+});
+
+test('renegotiationDelayMs does not retry in other states', () => {
+  for (const state of ['new', 'connecting', 'connected', 'closed', undefined]) {
+    assert.equal(renegotiationDelayMs(state), null, String(state));
+  }
 });

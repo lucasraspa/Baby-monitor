@@ -1,5 +1,5 @@
 import { connectSignal, serialize } from './signal.js';
-import { describeMediaError } from './logic.js';
+import { describeMediaError, renegotiationDelayMs } from './logic.js';
 
 const MEDIA_CONSTRAINTS = {
   video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 15, max: 24 } },
@@ -12,6 +12,7 @@ const setStatus = (text) => { el('status').textContent = text; };
 let stream = null;
 let pc = null;
 let signal = null;
+let retryTimer = null;
 
 async function acquireWakeLock() {
   if (!('wakeLock' in navigator)) {
@@ -27,6 +28,8 @@ async function acquireWakeLock() {
 }
 
 function closePeer() {
+  clearTimeout(retryTimer);
+  retryTimer = null;
   pc?.close();
   pc = null;
 }
@@ -34,6 +37,7 @@ function closePeer() {
 async function startOffer() {
   closePeer();
   pc = new RTCPeerConnection({ iceServers: [] });
+  const peer = pc;
   stream.getTracks().forEach((track) => pc.addTrack(track, stream));
   pc.onicecandidate = (event) => {
     if (event.candidate) {
@@ -41,7 +45,16 @@ async function startOffer() {
     }
   };
   pc.onconnectionstatechange = () => {
-    setStatus(pc?.connectionState === 'connected' ? 'Monitor conectado' : 'Conectando con el monitor…');
+    if (peer !== pc) {
+      return;
+    }
+    clearTimeout(retryTimer);
+    retryTimer = null;
+    setStatus(peer.connectionState === 'connected' ? 'Monitor conectado' : 'Conectando con el monitor…');
+    const delay = renegotiationDelayMs(peer.connectionState);
+    if (delay !== null) {
+      retryTimer = setTimeout(() => startOffer().catch((err) => console.error('renegociación', err)), delay);
+    }
   };
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);

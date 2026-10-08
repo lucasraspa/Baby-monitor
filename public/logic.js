@@ -1,5 +1,6 @@
 export const STALL_THRESHOLD_MS = 6000;
 export const LOST_AFTER_MS = 10000;
+export const RENEGOTIATE_AFTER_DISCONNECT_MS = 3000;
 
 const NO_RECONNECT_CODES = [4000, 4400];
 
@@ -37,4 +38,14 @@ export function describeMediaError(err) {
     return 'No se encontró cámara o micrófono en este dispositivo.';
   }
   return `No se pudo iniciar la cámara: ${err.message ?? err.name}`;
+}
+
+export function renegotiationDelayMs(connectionState) {
+  if (connectionState === 'failed') {
+    return 0;
+  }
+  if (connectionState === 'disconnected') {
+    return RENEGOTIATE_AFTER_DISCONNECT_MS;
+  }
+  return null;
 }
