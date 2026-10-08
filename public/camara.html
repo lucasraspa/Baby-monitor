@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Cámara del bebé</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="camara">
+  <main id="intro">
+    <h1>Cámara del bebé</h1>
+    <p class="muted">Deja el iPad enchufado y apuntando al bebé.</p>
+    <button id="start" type="button">Iniciar cámara</button>
+    <p id="error" class="warn" role="alert" hidden></p>
+  </main>
+  <main id="running" hidden>
+    <video id="preview" autoplay playsinline muted></video>
+    <p id="status">Esperando monitor…</p>
+    <p class="muted">Mantén el iPad enchufado.</p>
+    <p id="wakewarn" class="warn" hidden>Este iPad no puede mantener la pantalla encendida: desactiva el bloqueo automático en Ajustes › Pantalla y brillo.</p>
+  </main>
+  <script type="module" src="/camara.js"></script>
+</body>
+</html>

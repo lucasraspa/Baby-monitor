@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Monitor del bebé</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="monitor" data-status="waiting">
+  <main id="intro">
+    <h1>Monitor del bebé</h1>
+    <p class="muted">Deja esta pantalla encendida (desactiva el bloqueo automático).</p>
+    <button id="connect" type="button">Conectar</button>
+  </main>
+  <main id="running" hidden>
+    <div id="stage">
+      <video id="video" autoplay playsinline></video>
+      <div id="bar">
+        <span id="dot"></span>
+        <span id="label">Esperando cámara…</span>
+        <span class="spacer"></span>
+        <button id="alarm-off" class="secondary" type="button" hidden>Silenciar alarma</button>
+        <button id="mute" class="secondary" type="button" aria-label="Sonido">🔊</button>
+      </div>
+      <div id="overlay" hidden><button id="play" type="button">Toca para reproducir</button></div>
+    </div>
+  </main>
+  <script type="module" src="/monitor.js"></script>
+</body>
+</html>

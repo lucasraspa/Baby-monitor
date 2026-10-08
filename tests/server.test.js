@@ -77,7 +77,8 @@ test('healthz answers 200', async (t) => {
 test('unknown paths and traversal attempts answer 404', async (t) => {
   const { port } = await fixture(t);
 
-  for (const path of ['/', '/server.js', '/lib/room.js', '/../server.js', '/%2e%2e/server.js', '/package.json']) {
+  for (const path of ['/', '/server.js', '/lib/room.js', '/../server.js', '/%2e%2e/server.js', '/package.json',
+    '/public/logic.js', '/..%2Fpublic%2Flogic.js', '/public/../public/logic.js']) {
     assert.equal((await get(port, path)).status, 404, path);
   }
 });
@@ -196,4 +197,22 @@ test('an invalid role receiving a large frame does not crash the server', async 
   await intruder.closed;
   await new Promise((resolve) => setTimeout(resolve, 200));
   assert.equal((await get(f.port, '/healthz')).status, 200);
+});
+
+test('serves the pages and client assets with the right content types', async (t) => {
+  const { port } = await fixture(t);
+
+  for (const [path, type] of [
+    ['/camara', 'text/html'],
+    ['/monitor', 'text/html'],
+    ['/style.css', 'text/css'],
+    ['/logic.js', 'text/javascript'],
+    ['/signal.js', 'text/javascript'],
+    ['/camara.js', 'text/javascript'],
+    ['/monitor.js', 'text/javascript'],
+  ]) {
+    const res = await get(port, path);
+    assert.equal(res.status, 200, path);
+    assert.match(res.type, new RegExp(type), path);
+  }
 });
