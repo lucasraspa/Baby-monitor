@@ -1,0 +1,10 @@
+services:
+  baby-monitor:
+    build: .
+    container_name: baby-monitor
+    restart: unless-stopped
+    ports:
+      - "8830:8830"
+    environment:
+      - PORT=8830
+    mem_limit: 128m
