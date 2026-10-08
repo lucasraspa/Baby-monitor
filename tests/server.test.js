@@ -6,8 +6,15 @@ import { createMonitorServer } from '../server.js';
 
 const MESSAGE_TIMEOUT_MS = 2000;
 
-function openClient(port, role) {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?role=${role}`);
+function within(promise, ms = MESSAGE_TIMEOUT_MS) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout waiting for close')), ms).unref()),
+  ]);
+}
+
+function openClient(port, role, options = {}) {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?role=${role}`, options);
   const queue = [];
   const waiters = [];
   ws.on('message', (data) => {
@@ -37,8 +44,8 @@ function openClient(port, role) {
   return { ws, next, opened, closed };
 }
 
-async function fixture(t) {
-  const server = createMonitorServer();
+async function fixture(t, serverOptions = {}) {
+  const server = createMonitorServer(serverOptions);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
   const clients = [];
@@ -49,8 +56,8 @@ async function fixture(t) {
   });
   return {
     port,
-    client(role) {
-      const c = openClient(port, role);
+    client(role, options) {
+      const c = openClient(port, role, options);
       clients.push(c);
       return c;
     },
@@ -61,7 +68,7 @@ function get(port, path, method = 'GET') {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path, method }, (res) => {
       res.resume();
-      res.on('end', () => resolve({ status: res.statusCode, type: res.headers['content-type'] }));
+      res.on('end', () => resolve({ status: res.statusCode, type: res.headers['content-type'], nosniff: res.headers['x-content-type-options'] }));
     });
     req.on('error', reject);
     req.end();
@@ -215,4 +222,63 @@ test('serves the pages and client assets with the right content types', async (t
     assert.equal(res.status, 200, path);
     assert.match(res.type, new RegExp(type), path);
   }
+});
+
+test('rejects a websocket whose Origin host differs from Host with 4403', async (t) => {
+  const f = await fixture(t);
+  const monitor = f.client('monitor');
+  await monitor.opened;
+  assert.deepEqual(await monitor.next(), { type: 'welcome', peer: false });
+
+  const evil = f.client('camara', { headers: { Origin: 'https://evil.example' } });
+  evil.ws.on('error', () => {});
+
+  assert.equal(await within(evil.closed), 4403);
+  await assert.rejects(monitor.next(300), /timeout/);
+});
+
+test('accepts a websocket whose Origin host equals the Host header', async (t) => {
+  const f = await fixture(t);
+  const camara = f.client('camara', { headers: { Origin: `http://127.0.0.1:${f.port}` } });
+  await camara.opened;
+
+  assert.deepEqual(await camara.next(), { type: 'welcome', peer: false });
+});
+
+test('rejects a websocket with an unparseable Origin', async (t) => {
+  const f = await fixture(t);
+  const bad = f.client('camara', { headers: { Origin: 'not a url' } });
+  bad.ws.on('error', () => {});
+
+  assert.equal(await within(bad.closed), 4403);
+});
+
+test('heartbeat terminates a client that stops answering pings and notifies the peer', async (t) => {
+  const f = await fixture(t, { heartbeatMs: 50 });
+  const monitor = f.client('monitor');
+  await monitor.opened;
+  assert.deepEqual(await monitor.next(), { type: 'welcome', peer: false });
+  const camara = f.client('camara', { autoPong: false });
+  await camara.opened;
+  assert.deepEqual(await monitor.next(), { type: 'peer-joined' });
+
+  await within(camara.closed);
+
+  assert.deepEqual(await monitor.next(), { type: 'peer-left' });
+});
+
+test('heartbeat keeps a normal client connected across several rounds', async (t) => {
+  const f = await fixture(t, { heartbeatMs: 50 });
+  const monitor = f.client('monitor');
+  await monitor.opened;
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  assert.equal(monitor.ws.readyState, 1);
+});
+
+test('a malformed request target answers 400 and static files are nosniff', async (t) => {
+  const { port } = await fixture(t);
+
+  assert.equal((await get(port, '//')).status, 400);
+  assert.equal((await get(port, '/camara')).nosniff, 'nosniff');
 });

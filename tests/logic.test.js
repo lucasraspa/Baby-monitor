@@ -78,3 +78,12 @@ test('renegotiationDelayMs does not retry in other states', () => {
     assert.equal(renegotiationDelayMs(state), null, String(state));
   }
 });
+
+test('trackFrames treats a decreasing counter as a reset and progress', () => {
+  const old = trackFrames(initialFrameState(0), 5000, 100);
+
+  const reset = trackFrames(old, 3, 9000);
+
+  assert.deepEqual(reset, { frames: 3, advancedAt: 9000 });
+  assert.deepEqual(old, { frames: 5000, advancedAt: 100 });
+});

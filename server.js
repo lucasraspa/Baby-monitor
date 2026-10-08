@@ -8,6 +8,8 @@ import { createRoom, ROLES } from './lib/room.js';
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 const MAX_PAYLOAD_BYTES = 64 * 1024;
 const INVALID_ROLE_CODE = 4400;
+export const FORBIDDEN_ORIGIN_CODE = 4403;
+export const HEARTBEAT_MS = 30000;
 const RELAYED_TYPES = new Set(['offer', 'answer', 'candidate']);
 const PAGES = { '/camara': 'camara.html', '/monitor': 'monitor.html' };
 const ASSET_PATTERN = /^\/([a-z-]+\.(?:js|css))$/;
@@ -25,6 +27,14 @@ function resolveFile(pathname) {
   return match ? match[1] : null;
 }
 
+function parsePathname(target) {
+  try {
+    return new URL(target, 'http://localhost').pathname;
+  } catch {
+    return null;
+  }
+}
+
 function reply(res, status, body = '') {
   res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' });
   res.end(body);
@@ -35,7 +45,11 @@ async function handleRequest(req, res) {
     reply(res, 405, 'method not allowed');
     return;
   }
-  const { pathname } = new URL(req.url, 'http://localhost');
+  const pathname = parsePathname(req.url);
+  if (pathname === null) {
+    reply(res, 400, 'bad request');
+    return;
+  }
   if (pathname === '/healthz') {
     reply(res, 200, 'ok');
     return;
@@ -50,6 +64,7 @@ async function handleRequest(req, res) {
     res.writeHead(200, {
       'content-type': CONTENT_TYPES[path.extname(file)],
       'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
     });
     res.end(req.method === 'HEAD' ? undefined : body);
   } catch (err) {
@@ -71,7 +86,38 @@ function parseRelayable(data) {
   }
 }
 
-export function createMonitorServer() {
+function isForeignOrigin(req) {
+  const { origin, host } = req.headers;
+  if (origin === undefined) {
+    return false;
+  }
+  try {
+    return new URL(origin).host !== host;
+  } catch {
+    return true;
+  }
+}
+
+function startHeartbeat(wss, intervalMs) {
+  const alive = new WeakSet();
+  wss.on('connection', (ws) => {
+    alive.add(ws);
+    ws.on('pong', () => alive.add(ws));
+  });
+  const timer = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!alive.has(ws)) {
+        ws.terminate();
+        continue;
+      }
+      alive.delete(ws);
+      ws.ping();
+    }
+  }, intervalMs);
+  wss.on('close', () => clearInterval(timer));
+}
+
+export function createMonitorServer({ heartbeatMs = HEARTBEAT_MS } = {}) {
   const room = createRoom();
   const server = http.createServer((req, res) => {
     handleRequest(req, res).catch((err) => {
@@ -81,9 +127,15 @@ export function createMonitorServer() {
   });
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: MAX_PAYLOAD_BYTES });
 
+  startHeartbeat(wss, heartbeatMs);
+
   wss.on('connection', (ws, req) => {
     const role = new URL(req.url, 'http://localhost').searchParams.get('role');
     ws.on('error', (err) => console.error('error de websocket', role, err.message));
+    if (isForeignOrigin(req)) {
+      ws.close(FORBIDDEN_ORIGIN_CODE, 'forbidden origin');
+      return;
+    }
     if (!ROLES.includes(role)) {
       ws.close(INVALID_ROLE_CODE, 'invalid role');
       return;
@@ -98,5 +150,6 @@ export function createMonitorServer() {
     ws.on('close', () => room.leave(role, ws));
   });
 
+  server.on('close', () => wss.close());
   return server;
 }

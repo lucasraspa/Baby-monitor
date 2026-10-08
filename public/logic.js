@@ -13,7 +13,8 @@ export function initialFrameState(now) {
 }
 
 export function trackFrames(state, frames, now) {
-  return frames > state.frames ? { frames, advancedAt: now } : state;
+  // A lower counter means a new connection (counter reset): that is progress too.
+  return frames !== state.frames ? { frames, advancedAt: now } : state;
 }
 
 export function isStalled(state, now, thresholdMs = STALL_THRESHOLD_MS) {
