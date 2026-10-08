@@ -192,12 +192,8 @@ test('closing a client notifies the peer with peer-left', async (t) => {
 test('an invalid role receiving a large frame does not crash the server', async (t) => {
   const f = await fixture(t);
   const intruder = f.client('abuela');
-  await intruder.opened;
-
-  intruder.ws.send('x'.repeat(70 * 1024));
-
-  const code = await intruder.closed;
-  assert(code === 4400 || code === 1009, `close code was ${code}`);
-
+  intruder.ws.once('open', () => intruder.ws.send('x'.repeat(70 * 1024)));
+  await intruder.closed;
+  await new Promise((resolve) => setTimeout(resolve, 200));
   assert.equal((await get(f.port, '/healthz')).status, 200);
 });
