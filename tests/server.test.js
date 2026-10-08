@@ -188,3 +188,16 @@ test('closing a client notifies the peer with peer-left', async (t) => {
 
   assert.deepEqual(await camara.next(), { type: 'peer-left' });
 });
+
+test('an invalid role receiving a large frame does not crash the server', async (t) => {
+  const f = await fixture(t);
+  const intruder = f.client('abuela');
+  await intruder.opened;
+
+  intruder.ws.send('x'.repeat(70 * 1024));
+
+  const code = await intruder.closed;
+  assert(code === 4400 || code === 1009, `close code was ${code}`);
+
+  assert.equal((await get(f.port, '/healthz')).status, 200);
+});

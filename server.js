@@ -83,6 +83,7 @@ export function createMonitorServer() {
 
   wss.on('connection', (ws, req) => {
     const role = new URL(req.url, 'http://localhost').searchParams.get('role');
+    ws.on('error', (err) => console.error('error de websocket', role, err.message));
     if (!ROLES.includes(role)) {
       ws.close(INVALID_ROLE_CODE, 'invalid role');
       return;
@@ -95,7 +96,6 @@ export function createMonitorServer() {
       }
     });
     ws.on('close', () => room.leave(role, ws));
-    ws.on('error', (err) => console.error('error de websocket', role, err.message));
   });
 
   return server;
