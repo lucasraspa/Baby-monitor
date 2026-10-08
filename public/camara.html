@@ -11,11 +11,18 @@
   <main id="intro">
     <h1>Cámara del bebé</h1>
     <p class="muted">Deja el iPad enchufado y apuntando al bebé.</p>
+    <div class="facing-choice" role="group" aria-label="Qué cámara usar">
+      <button type="button" class="secondary" data-facing="environment" aria-pressed="true">Trasera</button>
+      <button type="button" class="secondary" data-facing="user" aria-pressed="false">Frontal</button>
+    </div>
     <button id="start" type="button">Iniciar cámara</button>
     <p id="error" class="warn" role="alert" hidden></p>
   </main>
   <main id="running" hidden>
     <video id="preview" autoplay playsinline muted></video>
+    <p id="facing-label" class="muted"></p>
+    <button id="switch" type="button" class="secondary">Cambiar cámara</button>
+    <p id="switch-error" class="warn" role="alert" hidden></p>
     <p id="status">Esperando monitor…</p>
     <p class="muted">Mantén el iPad enchufado.</p>
     <p id="wakewarn" class="warn" hidden>Este iPad no puede mantener la pantalla encendida: desactiva el bloqueo automático en Ajustes › Pantalla y brillo.</p>

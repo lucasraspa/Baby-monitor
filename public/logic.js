@@ -2,6 +2,12 @@ export const STALL_THRESHOLD_MS = 6000;
 export const LOST_AFTER_MS = 10000;
 export const RENEGOTIATE_AFTER_DISCONNECT_MS = 3000;
 
+export const DEFAULT_FACING = 'environment';
+const FACINGS = ['user', 'environment'];
+const VIDEO_WIDTH = 1280;
+const VIDEO_HEIGHT = 720;
+const FRAME_RATE_IDEAL = 15;
+const FRAME_RATE_MAX = 24;
 const NO_SERVER_TEXT = 'Sin conexión con el servidor';
 
 const NO_RECONNECT_CODES = [4000, 4400];
@@ -40,6 +46,9 @@ export function describeMediaError(err) {
   if (err.name === 'NotFoundError') {
     return 'No se encontró cámara o micrófono en este dispositivo.';
   }
+  if (err.name === 'OverconstrainedError') {
+    return 'Este dispositivo no tiene esa cámara.';
+  }
   return `No se pudo iniciar la cámara: ${err.message ?? err.name}`;
 }
 
@@ -51,6 +60,31 @@ export function renegotiationDelayMs(connectionState) {
     return RENEGOTIATE_AFTER_DISCONNECT_MS;
   }
   return null;
+}
+
+export function normalizeFacing(value) {
+  return FACINGS.includes(value) ? value : DEFAULT_FACING;
+}
+
+export function otherFacing(facing) {
+  return normalizeFacing(facing) === 'user' ? 'environment' : 'user';
+}
+
+export function videoConstraints(facing, strict = false) {
+  const value = normalizeFacing(facing);
+  return {
+    facingMode: strict ? { exact: value } : { ideal: value },
+    width: { ideal: VIDEO_WIDTH },
+    height: { ideal: VIDEO_HEIGHT },
+    frameRate: { ideal: FRAME_RATE_IDEAL, max: FRAME_RATE_MAX },
+  };
+}
+
+export function mediaConstraints(facing) {
+  return {
+    video: videoConstraints(facing),
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+  };
 }
 
 function describeMonitorWarning(status) {

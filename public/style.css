@@ -45,3 +45,8 @@ a.button { display: block; font-size: 1.4rem; padding: 1rem 2rem; border-radius:
 .dot[data-state="unknown"] { background: var(--muted); }
 .choice { display: flex; flex-direction: column; gap: .4rem; width: 100%; max-width: 22rem; }
 .choice p { margin: 0; }
+
+/* camara: selector trasera/frontal */
+.facing-choice { display: flex; gap: .6rem; }
+button.secondary[aria-pressed="true"] { background: var(--accent); color: #111; }
+button:disabled { opacity: .5; }

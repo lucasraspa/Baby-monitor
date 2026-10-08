@@ -11,6 +11,11 @@ import {
   describeMediaError,
   renegotiationDelayMs,
   describeStatus,
+  DEFAULT_FACING,
+  normalizeFacing,
+  otherFacing,
+  videoConstraints,
+  mediaConstraints,
   RENEGOTIATE_AFTER_DISCONNECT_MS,
 } from '../public/logic.js';
 
@@ -63,6 +68,7 @@ test('describeMediaError gives actionable text for denied and missing devices', 
   assert.match(describeMediaError({ name: 'NotAllowedError' }), /permiso/i);
   assert.match(describeMediaError({ name: 'NotFoundError' }), /no se encontr/i);
   assert.match(describeMediaError({ name: 'Raro', message: 'boom' }), /boom/);
+  assert.equal(describeMediaError({ name: 'OverconstrainedError' }), 'Este dispositivo no tiene esa cámara.');
 });
 
 test('renegotiationDelayMs retries immediately on failed', () => {
@@ -135,4 +141,44 @@ test('describeStatus gives the replace warning priority over the no-camera hint'
 
 test('describeStatus returns a new object each call', () => {
   assert.notEqual(describeStatus(null), describeStatus(null));
+});
+
+test('normalizeFacing keeps valid values and defaults everything else', () => {
+  assert.equal(DEFAULT_FACING, 'environment');
+  assert.equal(normalizeFacing('user'), 'user');
+  assert.equal(normalizeFacing('environment'), 'environment');
+  for (const bad of [null, undefined, '', 'left', 42, {}]) {
+    assert.equal(normalizeFacing(bad), 'environment');
+  }
+});
+
+test('otherFacing returns the opposite of the normalized value', () => {
+  assert.equal(otherFacing('user'), 'environment');
+  assert.equal(otherFacing('environment'), 'user');
+  assert.equal(otherFacing('garbage'), 'user');
+});
+
+test('videoConstraints is ideal by default and exact when strict', () => {
+  const soft = videoConstraints('user');
+  const strict = videoConstraints('user', true);
+
+  assert.deepEqual(soft, {
+    facingMode: { ideal: 'user' },
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    frameRate: { ideal: 15, max: 24 },
+  });
+  assert.deepEqual(strict.facingMode, { exact: 'user' });
+  assert.deepEqual(videoConstraints('nonsense').facingMode, { ideal: 'environment' });
+  assert.notEqual(videoConstraints('user'), soft);
+  assert.notEqual(videoConstraints('user').frameRate, soft.frameRate);
+});
+
+test('mediaConstraints combines non-strict video with the unchanged audio settings', () => {
+  const c = mediaConstraints('environment');
+
+  assert.deepEqual(c.video, videoConstraints('environment'));
+  assert.deepEqual(c.audio, { echoCancellation: false, noiseSuppression: false, autoGainControl: true });
+  assert.notEqual(mediaConstraints('environment'), c);
+  assert.notEqual(mediaConstraints('environment').audio, c.audio);
 });
