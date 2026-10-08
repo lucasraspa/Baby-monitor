@@ -110,3 +110,17 @@ export function describeStatus(status) {
     monitorWarning: describeMonitorWarning(status),
   };
 }
+
+export const CAPTURE_AUDIO_SESSION = 'play-and-record';
+
+export function applyAudioSessionType(nav, type) {
+  if (!nav?.audioSession) {
+    return false;
+  }
+  try {
+    nav.audioSession.type = type;
+    return true;
+  } catch {
+    return false;
+  }
+}

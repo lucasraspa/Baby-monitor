@@ -1,5 +1,7 @@
 import { connectSignal, serialize } from './signal.js';
 import {
+  CAPTURE_AUDIO_SESSION,
+  applyAudioSessionType,
   describeMediaError,
   mediaConstraints,
   normalizeFacing,
@@ -156,6 +158,7 @@ async function start() {
   el('start').disabled = true;
   el('error').hidden = true;
   try {
+    applyAudioSessionType(navigator, CAPTURE_AUDIO_SESSION);
     stream = await navigator.mediaDevices.getUserMedia(mediaConstraints(facing));
   } catch (err) {
     el('error').textContent = describeMediaError(err);
@@ -191,6 +194,7 @@ async function adoptVideoTrack(current, oldTrack, fresh) {
 }
 
 async function acquireVideoTrack(constraints) {
+  applyAudioSessionType(navigator, CAPTURE_AUDIO_SESSION);
   const media = await navigator.mediaDevices.getUserMedia({ video: constraints });
   return media.getVideoTracks()[0];
 }

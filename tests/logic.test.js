@@ -16,6 +16,8 @@ import {
   otherFacing,
   videoConstraints,
   mediaConstraints,
+  applyAudioSessionType,
+  CAPTURE_AUDIO_SESSION,
   RENEGOTIATE_AFTER_DISCONNECT_MS,
 } from '../public/logic.js';
 
@@ -181,4 +183,26 @@ test('mediaConstraints combines non-strict video with the unchanged audio settin
   assert.deepEqual(c.audio, { echoCancellation: false, noiseSuppression: false, autoGainControl: true });
   assert.notEqual(mediaConstraints('environment'), c);
   assert.notEqual(mediaConstraints('environment').audio, c.audio);
+});
+
+test('applyAudioSessionType sets the type and reports success', () => {
+  const nav = { audioSession: { type: 'playback' }, other: 1 };
+
+  assert.equal(CAPTURE_AUDIO_SESSION, 'play-and-record');
+  assert.equal(applyAudioSessionType(nav, CAPTURE_AUDIO_SESSION), true);
+  assert.equal(nav.audioSession.type, 'play-and-record');
+  assert.equal(nav.other, 1);
+});
+
+test('applyAudioSessionType returns false without an audioSession', () => {
+  assert.equal(applyAudioSessionType({}, 'play-and-record'), false);
+  assert.equal(applyAudioSessionType(undefined, 'play-and-record'), false);
+  assert.equal(applyAudioSessionType(null, 'play-and-record'), false);
+});
+
+test('applyAudioSessionType returns false when the assignment throws', () => {
+  const audioSession = {};
+  Object.defineProperty(audioSession, 'type', { set() { throw new TypeError('nope'); } });
+
+  assert.equal(applyAudioSessionType({ audioSession }, 'play-and-record'), false);
 });
