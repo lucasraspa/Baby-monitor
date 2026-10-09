@@ -268,9 +268,18 @@ test('fullscreenMode uses the native API when the element supports it', () => {
   assert.equal(fullscreenMode({ webkitRequestFullscreen() {} }), 'native');
 });
 
-test('fullscreenMode falls back to immersive where only video can go fullscreen (iPhone)', () => {
-  assert.equal(fullscreenMode({}), 'immersive');
-  assert.equal(fullscreenMode(null), 'immersive');
+test('fullscreenMode uses the video element where only it can go fullscreen (iPhone)', () => {
+  assert.equal(fullscreenMode({}, { webkitEnterFullscreen() {} }), 'video');
+  assert.equal(fullscreenMode(null, { webkitEnterFullscreen() {} }), 'video');
+});
+
+test('fullscreenMode prefers the stage over the video when both can', () => {
+  assert.equal(fullscreenMode({ requestFullscreen() {} }, { webkitEnterFullscreen() {} }), 'native');
+});
+
+test('fullscreenMode falls back to immersive when nothing supports fullscreen', () => {
+  assert.equal(fullscreenMode({}, {}), 'immersive');
+  assert.equal(fullscreenMode(null, null), 'immersive');
 });
 
 test('rmsLevel is 0 for silence and for no samples', () => {

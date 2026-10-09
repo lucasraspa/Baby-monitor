@@ -271,7 +271,17 @@ async function connect() {
 
 function toggleFullscreen() {
   const stage = el('stage');
-  if (fullscreenMode(stage) === 'immersive') {
+  const mode = fullscreenMode(stage, el('video'));
+  if (mode === 'video') {
+    try {
+      el('video').webkitEnterFullscreen();
+    } catch (err) {
+      console.error('fullscreen', err);
+      document.body.classList.add('immersive');
+    }
+    return;
+  }
+  if (mode === 'immersive') {
     document.body.classList.toggle('immersive');
     return;
   }

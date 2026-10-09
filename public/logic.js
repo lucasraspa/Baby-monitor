@@ -152,10 +152,11 @@ export function monitorStatus(connectionStatus, crying) {
   return connectionStatus === 'live' && crying ? 'cry' : connectionStatus;
 }
 
-export function fullscreenMode(element) {
-  const supported = typeof element?.requestFullscreen === 'function'
-    || typeof element?.webkitRequestFullscreen === 'function';
-  return supported ? 'native' : 'immersive';
+export function fullscreenMode(stage, video) {
+  if (typeof stage?.requestFullscreen === 'function' || typeof stage?.webkitRequestFullscreen === 'function') {
+    return 'native';
+  }
+  return typeof video?.webkitEnterFullscreen === 'function' ? 'video' : 'immersive';
 }
 
 export function rmsLevel(samples) {
