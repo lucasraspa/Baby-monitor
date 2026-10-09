@@ -7,6 +7,7 @@ import {
   normalizeFacing,
   otherFacing,
   initialCryState,
+  normalizeThreshold,
   renegotiationDelayMs,
   rmsLevel,
   trackCry,
@@ -18,6 +19,8 @@ const FACING_LABELS = { environment: 'Cámara trasera', user: 'Cámara frontal' 
 const RESTORE_FAILED_TEXT = 'No se pudo recuperar la cámara: recarga la página';
 
 const REPLACED_CLOSE_CODE = 4000;
+const THRESHOLD_STORAGE_KEY = 'camara.cryThreshold';
+const METER_FULL_SCALE = 0.3;
 const CRY_SAMPLE_MS = 1000;
 const CRY_ANALYSER_FFT = 32768;
 
@@ -33,6 +36,7 @@ let facing = readStoredFacing();
 let audioCtx = null;
 let cryState = initialCryState();
 let cryTimer = null;
+let threshold = readStoredThreshold();
 
 function readStoredFacing() {
   try {
@@ -48,6 +52,36 @@ function storeFacing(value) {
   } catch (err) {
     console.error('localStorage', err);
   }
+}
+
+function readStoredThreshold() {
+  try {
+    return normalizeThreshold(localStorage.getItem(THRESHOLD_STORAGE_KEY));
+  } catch {
+    return normalizeThreshold(null);
+  }
+}
+
+function chooseThreshold(value) {
+  threshold = normalizeThreshold(value);
+  try {
+    localStorage.setItem(THRESHOLD_STORAGE_KEY, String(threshold));
+  } catch (err) {
+    console.error('localStorage', err);
+  }
+  renderThreshold();
+}
+
+function renderThreshold() {
+  el('threshold').value = String(threshold);
+  el('threshold-text').textContent = threshold.toFixed(3);
+  el('meter-mark').style.left = `${Math.min(100, (threshold / METER_FULL_SCALE) * 100)}%`;
+}
+
+function renderLevel(level, crying) {
+  el('meter-fill').style.width = `${Math.min(100, (level / METER_FULL_SCALE) * 100)}%`;
+  el('level-text').textContent = `Nivel ${level.toFixed(3)}`;
+  el('cry-text').textContent = crying ? 'LLANTO' : 'Sin llanto';
 }
 
 function renderFacing() {
@@ -139,6 +173,9 @@ async function handleMessage(message) {
       }
       break;
     case 'peer-joined':
+      if (cryState.crying) {
+        signal.send({ type: 'cry', crying: true });
+      }
       await startOffer();
       break;
     case 'peer-left':
@@ -177,11 +214,13 @@ function startCryWatch(source) {
   cryTimer = setInterval(() => {
     audioCtx.resume().catch((err) => console.error('audio resume', err));
     analyser.getFloatTimeDomainData(samples);
-    const next = trackCry(cryState, rmsLevel(samples));
+    const level = rmsLevel(samples);
+    const next = trackCry(cryState, level, threshold);
     if (next.crying !== cryState.crying) {
       signal?.send({ type: 'cry', crying: next.crying });
     }
     cryState = next;
+    renderLevel(level, next.crying);
   }, CRY_SAMPLE_MS);
 }
 
@@ -198,12 +237,14 @@ function createAudioContext() {
 
 function setUpCryWatch() {
   if (!audioCtx) {
+    el('cry-text').textContent = 'Detección de llanto NO disponible';
     return;
   }
   try {
     startCryWatch(audioCtx.createMediaStreamSource(stream));
   } catch (err) {
     console.error('detección de llanto no disponible', err);
+    el('cry-text').textContent = 'Detección de llanto NO disponible';
   }
 }
 
@@ -313,4 +354,6 @@ el('switch').addEventListener('click', switchCamera);
 document.querySelectorAll('[data-facing]').forEach((button) => {
   button.addEventListener('click', () => chooseFacing(button.dataset.facing));
 });
+el('threshold').addEventListener('input', (event) => chooseThreshold(event.target.value));
 renderFacing();
+renderThreshold();

@@ -396,7 +396,7 @@ test('a monitor joining or leaving never touches the notifier', async (t) => {
   assert.deepEqual(notifier.calls, []);
 });
 
-test('cry messages from the camera reach the notifier and are not relayed', async (t) => {
+test('cry messages from the camera reach the notifier and are relayed to the monitor', async (t) => {
   const notifier = spyNotifier();
   const { client } = await fixture(t, { notifier });
   const monitor = client('monitor');
@@ -411,7 +411,8 @@ test('cry messages from the camera reach the notifier and are not relayed', asyn
   await settle();
 
   assert.deepEqual(notifier.calls, ['joined', 'cry:true', 'cry:false']);
-  await assert.rejects(monitor.next(200), /timeout/);
+  assert.deepEqual(await monitor.next(), { type: 'cry', crying: true });
+  assert.deepEqual(await monitor.next(), { type: 'cry', crying: false });
 });
 
 test('cry messages from a monitor or with a bad payload are ignored', async (t) => {

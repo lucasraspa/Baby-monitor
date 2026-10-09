@@ -125,8 +125,10 @@ export function applyAudioSessionType(nav, type) {
   }
 }
 
-// Llanto: audioLevel (0..1) del inbound-rtp, muestreado cada tick de 1 s.
-export const CRY_LEVEL = 0.1;
+// Llanto: nivel RMS (0..1) del micrófono del iPad, muestreado cada tick de 1 s.
+export const CRY_LEVEL = 0.05;
+export const CRY_THRESHOLD_MIN = 0.005;
+export const CRY_THRESHOLD_MAX = 0.3;
 export const CRY_WINDOW = 6;
 export const CRY_MIN_LOUD = 4;
 export const CRY_CLEAR_QUIET = 10;
@@ -135,9 +137,17 @@ export function initialCryState() {
   return { levels: [], quietTicks: 0, crying: false };
 }
 
-export function trackCry(state, level) {
+export function normalizeThreshold(value) {
+  const number = Number(value);
+  if (value === null || value === undefined || String(value).trim() === '' || !Number.isFinite(number)) {
+    return CRY_LEVEL;
+  }
+  return Math.min(CRY_THRESHOLD_MAX, Math.max(CRY_THRESHOLD_MIN, number));
+}
+
+export function trackCry(state, level, threshold = CRY_LEVEL) {
   const levels = [...state.levels, level ?? 0].slice(-CRY_WINDOW);
-  const loudTicks = levels.filter((value) => value > CRY_LEVEL).length;
+  const loudTicks = levels.filter((value) => value > threshold).length;
   if (loudTicks >= CRY_MIN_LOUD) {
     return { levels, quietTicks: 0, crying: true };
   }

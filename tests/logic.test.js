@@ -28,6 +28,9 @@ import {
   monitorStatus,
   fullscreenMode,
   rmsLevel,
+  CRY_THRESHOLD_MIN,
+  CRY_THRESHOLD_MAX,
+  normalizeThreshold,
 } from '../public/logic.js';
 
 test('shouldReconnect is false for replaced and invalid-role closes only', () => {
@@ -216,8 +219,23 @@ test('applyAudioSessionType returns false when the assignment throws', () => {
   assert.equal(applyAudioSessionType({ audioSession }, 'play-and-record'), false);
 });
 
-const feed = (state, levels) => levels.reduce(trackCry, state);
+const feed = (state, levels) => levels.reduce((acc, level) => trackCry(acc, level), state);
 const LOUD = CRY_LEVEL + 0.05;
+
+test('trackCry honours a custom threshold', () => {
+  const quiet = 0.03;
+  assert.equal(feed(initialCryState(), Array(CRY_MIN_LOUD).fill(quiet)).crying, false);
+  const state = Array(CRY_MIN_LOUD).fill(quiet).reduce((s, level) => trackCry(s, level, 0.02), initialCryState());
+  assert.equal(state.crying, true);
+});
+
+test('normalizeThreshold clamps and falls back to the default', () => {
+  assert.equal(normalizeThreshold('0.07'), 0.07);
+  assert.equal(normalizeThreshold(0), CRY_THRESHOLD_MIN);
+  assert.equal(normalizeThreshold(5), CRY_THRESHOLD_MAX);
+  assert.equal(normalizeThreshold('abc'), CRY_LEVEL);
+  assert.equal(normalizeThreshold(null), CRY_LEVEL);
+});
 
 test('trackCry starts not crying and ignores a single loud tick', () => {
   const state = feed(initialCryState(), [LOUD]);

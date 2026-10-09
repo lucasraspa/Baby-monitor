@@ -24,6 +24,14 @@
     <button id="switch" type="button" class="secondary">Cambiar cámara</button>
     <p id="switch-error" class="warn" role="alert" hidden></p>
     <p id="status">Esperando monitor…</p>
+    <section id="sensitivity" aria-label="Sensibilidad del aviso de llanto">
+      <h2>Aviso de llanto</h2>
+      <div id="meter"><div id="meter-fill"></div><div id="meter-mark"></div></div>
+      <p class="muted"><span id="level-text">Nivel 0.000</span> · <span id="cry-text">Sin llanto</span></p>
+      <label for="threshold">Umbral: <output id="threshold-text"></output></label>
+      <input id="threshold" type="range" min="0.005" max="0.3" step="0.005">
+      <p class="muted">Ajusta el umbral entre el nivel del silencio y el del llanto.</p>
+    </section>
     <p class="muted">Mantén el iPad enchufado.</p>
     <p id="wakewarn" class="warn" hidden>Este iPad no puede mantener la pantalla encendida: desactiva el bloqueo automático en Ajustes › Pantalla y brillo.</p>
   </main>

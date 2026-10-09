@@ -61,3 +61,12 @@ body[data-status="cry"] #stage { animation: cry-flash 1s steps(2, start) infinit
 @media (orientation: landscape) and (max-height: 500px) { #bar { padding-top: .3rem; padding-bottom: .3rem; } #bar button.secondary { padding: .3rem .7rem; } }
 body.immersive #bar, body.immersive #wakewarn-monitor { display: none; }
 #stage:fullscreen, #stage:-webkit-full-screen { background: #000; }
+
+/* camara: medidor y umbral del aviso de llanto */
+#sensitivity { width: 100%; max-width: 22rem; display: flex; flex-direction: column; gap: .4rem; text-align: left; }
+#sensitivity h2 { margin: 0; font-size: 1rem; }
+#sensitivity p { margin: 0; }
+#meter { position: relative; height: 1.2rem; background: #20242b; border-radius: .6rem; overflow: hidden; }
+#meter-fill { height: 100%; width: 0; background: var(--live); transition: width .2s; }
+#meter-mark { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--warn); }
+#threshold { width: 100%; }

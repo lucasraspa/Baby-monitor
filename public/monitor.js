@@ -4,8 +4,6 @@ import {
   initialFrameState,
   trackFrames,
   isStalled,
-  initialCryState,
-  trackCry,
   monitorStatus,
   fullscreenMode,
 } from './logic.js';
@@ -39,7 +37,7 @@ let displaced = false;
 let everLive = false;
 let downSince = null;
 let frameState = initialFrameState(Date.now());
-let cryState = initialCryState();
+let cameraCrying = false;
 let alarmKind = null;
 
 function updateAudioWarning() {
@@ -117,31 +115,25 @@ function closePeer() {
   pc?.close();
   pc = null;
   frameState = initialFrameState(Date.now());
-  cryState = initialCryState();
 }
 
-async function readStats(peer) {
+async function readFrames(peer) {
   if (!peer) {
-    return { frames: null, audioLevel: null };
+    return null;
   }
-  const stats = { frames: null, audioLevel: null };
+  let frames = null;
   (await peer.getStats()).forEach((report) => {
-    if (report.type !== 'inbound-rtp') {
-      return;
-    }
-    if (report.kind === 'video') {
-      stats.frames = report.framesDecoded ?? 0;
-    } else if (report.kind === 'audio') {
-      stats.audioLevel = report.audioLevel ?? null;
+    if (report.type === 'inbound-rtp' && report.kind === 'video') {
+      frames = report.framesDecoded ?? 0;
     }
   });
-  return stats;
+  return frames;
 }
 
 async function tick() {
   const now = Date.now();
   const peer = pc;
-  const { frames, audioLevel } = await readStats(peer);
+  const frames = await readFrames(peer);
   if (pc !== peer || displaced) {
     return;
   }
@@ -159,9 +151,8 @@ async function tick() {
   } else if (everLive && downSince === null) {
     downSince = now;
   }
-  cryState = trackCry(cryState, flowing ? audioLevel : null);
   const connection = classify({ everLive, flowing, downMs: downSince === null ? 0 : now - downSince });
-  render(monitorStatus(connection, cryState.crying));
+  render(monitorStatus(connection, cameraCrying));
 }
 
 function handleDisplaced() {
@@ -170,6 +161,7 @@ function handleDisplaced() {
   tickTimer = null;
   closePeer();
   el('video').srcObject = null;
+  cameraCrying = false;
   setAlarm(null);
   render('displaced');
 }
@@ -218,8 +210,16 @@ async function handleMessage(message) {
     case 'offer':
       await handleOffer(message);
       break;
+    case 'welcome':
+    case 'peer-joined':
+      cameraCrying = false; // the camera resends its state right after joining
+      break;
     case 'peer-left':
       closePeer();
+      cameraCrying = false;
+      break;
+    case 'cry':
+      cameraCrying = message.crying === true;
       break;
     case 'candidate':
       await peer?.addIceCandidate(message.candidate);

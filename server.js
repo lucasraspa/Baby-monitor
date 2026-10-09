@@ -181,6 +181,7 @@ export function createMonitorServer({ heartbeatMs = HEARTBEAT_MS, notifier = def
       const cry = role === 'camara' ? parseCry(data) : null;
       if (cry) {
         notifier.cryChanged(cry.crying);
+        room.relay(role, { type: 'cry', crying: cry.crying });
       }
     });
     ws.on('close', () => {
