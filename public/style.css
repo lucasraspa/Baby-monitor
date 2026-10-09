@@ -29,6 +29,7 @@ body.monitor main { justify-content: flex-start; padding: 0; gap: 0; }
 body[data-status="live"] #dot { background: var(--live); }
 body[data-status="reconnecting"] #dot, body[data-status="waiting"] #dot { background: var(--warn); }
 body[data-status="lost"] #dot { background: var(--lost); }
+body[data-status="cry"] #dot { background: var(--warn); }
 #bar .spacer { flex: 1; }
 #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.6); }
 body[data-status="lost"] #stage { animation: flash 1s steps(2, start) infinite; }
@@ -50,3 +51,13 @@ a.button { display: block; font-size: 1.4rem; padding: 1rem 2rem; border-radius:
 .facing-choice { display: flex; gap: .6rem; }
 button.secondary[aria-pressed="true"] { background: var(--accent); color: #111; }
 button:disabled { opacity: .5; }
+
+/* llanto: borde ámbar parpadeante */
+body[data-status="cry"] #stage { animation: cry-flash 1s steps(2, start) infinite; }
+@keyframes cry-flash { 50% { box-shadow: inset 0 0 0 .6rem var(--warn); } }
+
+/* horizontal y modo inmersivo */
+#bar { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
+@media (orientation: landscape) and (max-height: 500px) { #bar { padding-top: .3rem; padding-bottom: .3rem; } #bar button.secondary { padding: .3rem .7rem; } }
+body.immersive #bar, body.immersive #wakewarn-monitor { display: none; }
+#stage:fullscreen, #stage:-webkit-full-screen { background: #000; }

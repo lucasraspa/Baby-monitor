@@ -19,6 +19,14 @@ import {
   applyAudioSessionType,
   CAPTURE_AUDIO_SESSION,
   RENEGOTIATE_AFTER_DISCONNECT_MS,
+  CRY_LEVEL,
+  CRY_WINDOW,
+  CRY_MIN_LOUD,
+  CRY_CLEAR_QUIET,
+  initialCryState,
+  trackCry,
+  monitorStatus,
+  fullscreenMode,
 } from '../public/logic.js';
 
 test('shouldReconnect is false for replaced and invalid-role closes only', () => {
@@ -205,4 +213,61 @@ test('applyAudioSessionType returns false when the assignment throws', () => {
   Object.defineProperty(audioSession, 'type', { set() { throw new TypeError('nope'); } });
 
   assert.equal(applyAudioSessionType({ audioSession }, 'play-and-record'), false);
+});
+
+const feed = (state, levels) => levels.reduce(trackCry, state);
+const LOUD = CRY_LEVEL + 0.05;
+
+test('trackCry starts not crying and ignores a single loud tick', () => {
+  const state = feed(initialCryState(), [LOUD]);
+  assert.equal(state.crying, false);
+});
+
+test('trackCry flags crying once enough ticks in the window are loud', () => {
+  const loud = Array(CRY_MIN_LOUD).fill(LOUD);
+  assert.equal(feed(initialCryState(), loud).crying, true);
+});
+
+test('trackCry does not flag sparse loud ticks (a door slam, not crying)', () => {
+  const sparse = [LOUD, 0, 0, LOUD, 0, 0, LOUD, 0, 0, LOUD, 0, 0];
+  assert.equal(feed(initialCryState(), sparse).crying, false);
+});
+
+test('trackCry keeps crying through short pauses between sobs', () => {
+  const crying = feed(initialCryState(), Array(CRY_MIN_LOUD).fill(LOUD));
+  assert.equal(feed(crying, Array(CRY_CLEAR_QUIET - 1).fill(0)).crying, true);
+});
+
+test('trackCry clears after sustained quiet', () => {
+  const crying = feed(initialCryState(), Array(CRY_MIN_LOUD).fill(LOUD));
+  assert.equal(feed(crying, Array(CRY_WINDOW + CRY_CLEAR_QUIET).fill(0)).crying, false);
+});
+
+test('trackCry treats missing audio level as silence', () => {
+  const crying = feed(initialCryState(), Array(CRY_MIN_LOUD).fill(LOUD));
+  assert.equal(feed(crying, Array(CRY_WINDOW + CRY_CLEAR_QUIET).fill(null)).crying, false);
+});
+
+test('trackCry returns a new state and never mutates the previous one', () => {
+  const before = initialCryState();
+  const snapshot = JSON.stringify(before);
+  trackCry(before, LOUD);
+  assert.equal(JSON.stringify(before), snapshot);
+});
+
+test('monitorStatus reports cry only while the stream is live', () => {
+  assert.equal(monitorStatus('live', true), 'cry');
+  assert.equal(monitorStatus('live', false), 'live');
+  assert.equal(monitorStatus('lost', true), 'lost');
+  assert.equal(monitorStatus('reconnecting', true), 'reconnecting');
+});
+
+test('fullscreenMode uses the native API when the element supports it', () => {
+  assert.equal(fullscreenMode({ requestFullscreen() {} }), 'native');
+  assert.equal(fullscreenMode({ webkitRequestFullscreen() {} }), 'native');
+});
+
+test('fullscreenMode falls back to immersive where only video can go fullscreen (iPhone)', () => {
+  assert.equal(fullscreenMode({}), 'immersive');
+  assert.equal(fullscreenMode(null), 'immersive');
 });

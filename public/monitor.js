@@ -4,10 +4,14 @@ import {
   initialFrameState,
   trackFrames,
   isStalled,
+  initialCryState,
+  trackCry,
+  monitorStatus,
+  fullscreenMode,
 } from './logic.js';
 
 const TICK_MS = 1000;
-const ALARM_BEEP_HZ = 880;
+const ALARM_BEEP_HZ = { lost: 880, cry: 520 };
 const ALARM_BEEP_SECONDS = 0.3;
 const ALARM_BEEP_GAIN = 0.3;
 const REPLACED_CLOSE_CODE = 4000;
@@ -15,6 +19,7 @@ const LABELS = {
   waiting: 'Esperando cámara…',
   live: 'En directo',
   reconnecting: 'Reconectando…',
+  cry: 'Llanto detectado',
   lost: 'SIN SEÑAL — revisa el iPad',
   displaced: 'Otro monitor ha tomado el control — recarga para recuperarlo',
 };
@@ -34,6 +39,8 @@ let displaced = false;
 let everLive = false;
 let downSince = null;
 let frameState = initialFrameState(Date.now());
+let cryState = initialCryState();
+let alarmKind = null;
 
 function updateAudioWarning() {
   const needed = alarmTimer !== null && !alarmSilenced && audioCtx !== null && audioCtx.state !== 'running';
@@ -64,7 +71,7 @@ async function beep() {
     }
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    osc.frequency.value = ALARM_BEEP_HZ;
+    osc.frequency.value = ALARM_BEEP_HZ[alarmKind] ?? ALARM_BEEP_HZ.lost;
     gain.gain.value = ALARM_BEEP_GAIN;
     osc.connect(gain).connect(audioCtx.destination);
     osc.start();
@@ -74,7 +81,17 @@ async function beep() {
   }
 }
 
-function setAlarm(active) {
+function setAlarm(kind) {
+  const active = kind !== null;
+  if (active && alarmKind !== null && kind !== alarmKind) {
+    alarmSilenced = false;
+    el('alarm-off').textContent = 'Silenciar alarma';
+    el('alarm-off').disabled = false;
+  }
+  if (active && kind !== alarmKind) {
+    document.body.classList.remove('immersive'); // show the silence button once per alert, not every tick
+  }
+  alarmKind = kind;
   el('alarm-off').hidden = !active;
   if (active && !alarmTimer) {
     alarmTimer = setInterval(beep, 1000);
@@ -93,32 +110,38 @@ function setAlarm(active) {
 function render(status) {
   document.body.dataset.status = status;
   el('label').textContent = LABELS[status];
-  setAlarm(status === 'lost');
+  setAlarm(status === 'lost' || status === 'cry' ? status : null);
 }
 
 function closePeer() {
   pc?.close();
   pc = null;
   frameState = initialFrameState(Date.now());
+  cryState = initialCryState();
 }
 
-async function readFrames(peer) {
+async function readStats(peer) {
   if (!peer) {
-    return null;
+    return { frames: null, audioLevel: null };
   }
-  let frames = null;
+  const stats = { frames: null, audioLevel: null };
   (await peer.getStats()).forEach((report) => {
-    if (report.type === 'inbound-rtp' && report.kind === 'video') {
-      frames = report.framesDecoded ?? 0;
+    if (report.type !== 'inbound-rtp') {
+      return;
+    }
+    if (report.kind === 'video') {
+      stats.frames = report.framesDecoded ?? 0;
+    } else if (report.kind === 'audio') {
+      stats.audioLevel = report.audioLevel ?? null;
     }
   });
-  return frames;
+  return stats;
 }
 
 async function tick() {
   const now = Date.now();
   const peer = pc;
-  const frames = await readFrames(peer);
+  const { frames, audioLevel } = await readStats(peer);
   if (pc !== peer || displaced) {
     return;
   }
@@ -136,7 +159,9 @@ async function tick() {
   } else if (everLive && downSince === null) {
     downSince = now;
   }
-  render(classify({ everLive, flowing, downMs: downSince === null ? 0 : now - downSince }));
+  cryState = trackCry(cryState, flowing ? audioLevel : null);
+  const connection = classify({ everLive, flowing, downMs: downSince === null ? 0 : now - downSince });
+  render(monitorStatus(connection, cryState.crying));
 }
 
 function handleDisplaced() {
@@ -145,7 +170,7 @@ function handleDisplaced() {
   tickTimer = null;
   closePeer();
   el('video').srcObject = null;
-  setAlarm(false);
+  setAlarm(null);
   render('displaced');
 }
 
@@ -244,7 +269,28 @@ async function connect() {
   tickTimer = setInterval(() => tick().catch((err) => console.error('tick', err)), TICK_MS);
 }
 
+function toggleFullscreen() {
+  const stage = el('stage');
+  if (fullscreenMode(stage) === 'immersive') {
+    document.body.classList.toggle('immersive');
+    return;
+  }
+  const active = document.fullscreenElement ?? document.webkitFullscreenElement;
+  if (active) {
+    (document.exitFullscreen ?? document.webkitExitFullscreen).call(document);
+    return;
+  }
+  const request = stage.requestFullscreen ?? stage.webkitRequestFullscreen;
+  Promise.resolve(request.call(stage)).catch(() => document.body.classList.add('immersive'));
+}
+
 el('connect').addEventListener('click', connect);
+el('fullscreen').addEventListener('click', toggleFullscreen);
+el('stage').addEventListener('click', (event) => {
+  if (document.body.classList.contains('immersive') && !event.target.closest('#bar')) {
+    document.body.classList.remove('immersive');
+  }
+});
 el('play').addEventListener('click', () => { el('video').muted = false; playVideo(); });
 el('mute').addEventListener('click', () => {
   const video = el('video');

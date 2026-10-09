@@ -124,3 +124,36 @@ export function applyAudioSessionType(nav, type) {
     return false;
   }
 }
+
+// Llanto: audioLevel (0..1) del inbound-rtp, muestreado cada tick de 1 s.
+export const CRY_LEVEL = 0.1;
+export const CRY_WINDOW = 6;
+export const CRY_MIN_LOUD = 4;
+export const CRY_CLEAR_QUIET = 10;
+
+export function initialCryState() {
+  return { levels: [], quietTicks: 0, crying: false };
+}
+
+export function trackCry(state, level) {
+  const levels = [...state.levels, level ?? 0].slice(-CRY_WINDOW);
+  const loudTicks = levels.filter((value) => value > CRY_LEVEL).length;
+  if (loudTicks >= CRY_MIN_LOUD) {
+    return { levels, quietTicks: 0, crying: true };
+  }
+  if (!state.crying) {
+    return { levels, quietTicks: 0, crying: false };
+  }
+  const quietTicks = state.quietTicks + 1;
+  return { levels, quietTicks, crying: quietTicks < CRY_CLEAR_QUIET };
+}
+
+export function monitorStatus(connectionStatus, crying) {
+  return connectionStatus === 'live' && crying ? 'cry' : connectionStatus;
+}
+
+export function fullscreenMode(element) {
+  const supported = typeof element?.requestFullscreen === 'function'
+    || typeof element?.webkitRequestFullscreen === 'function';
+  return supported ? 'native' : 'immersive';
+}
