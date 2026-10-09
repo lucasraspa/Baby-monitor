@@ -157,3 +157,14 @@ export function fullscreenMode(element) {
     || typeof element?.webkitRequestFullscreen === 'function';
   return supported ? 'native' : 'immersive';
 }
+
+export function rmsLevel(samples) {
+  if (samples.length === 0) {
+    return 0;
+  }
+  let sum = 0;
+  for (const sample of samples) {
+    sum += sample * sample;
+  }
+  return Math.sqrt(sum / samples.length);
+}

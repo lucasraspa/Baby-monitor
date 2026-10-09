@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     ports:
       - "8830:8830"
+    env_file:
+      - .env
     environment:
       - PORT=8830
     mem_limit: 128m

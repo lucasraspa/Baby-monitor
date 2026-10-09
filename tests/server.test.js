@@ -343,3 +343,89 @@ test('a malformed request target answers 400 and static files are nosniff', asyn
   assert.equal((await get(port, '//')).status, 400);
   assert.equal((await get(port, '/camara')).nosniff, 'nosniff');
 });
+
+function spyNotifier() {
+  const calls = [];
+  return {
+    calls,
+    cameraJoined: () => calls.push('joined'),
+    cameraLeft: () => calls.push('left'),
+    cryChanged: (crying) => calls.push(`cry:${crying}`),
+  };
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+
+test('camera joining and leaving drive the notifier', async (t) => {
+  const notifier = spyNotifier();
+  const { client } = await fixture(t, { notifier });
+  const camara = client('camara');
+  await camara.opened;
+  await camara.next();
+  camara.ws.close();
+  await camara.closed;
+  await settle();
+
+  assert.deepEqual(notifier.calls, ['joined', 'left']);
+});
+
+test('a replaced camera does not count as the camera leaving', async (t) => {
+  const notifier = spyNotifier();
+  const { client } = await fixture(t, { notifier });
+  const first = client('camara');
+  await first.opened;
+  await first.next();
+  const second = client('camara');
+  await second.opened;
+  await first.closed;
+  await settle();
+
+  assert.deepEqual(notifier.calls, ['joined', 'joined']);
+});
+
+test('a monitor joining or leaving never touches the notifier', async (t) => {
+  const notifier = spyNotifier();
+  const { client } = await fixture(t, { notifier });
+  const monitor = client('monitor');
+  await monitor.opened;
+  await monitor.next();
+  monitor.ws.close();
+  await monitor.closed;
+  await settle();
+
+  assert.deepEqual(notifier.calls, []);
+});
+
+test('cry messages from the camera reach the notifier and are not relayed', async (t) => {
+  const notifier = spyNotifier();
+  const { client } = await fixture(t, { notifier });
+  const monitor = client('monitor');
+  await monitor.opened;
+  await monitor.next();
+  const camara = client('camara');
+  await camara.opened;
+  await camara.next();
+  await monitor.next(); // peer-joined
+  camara.ws.send(JSON.stringify({ type: 'cry', crying: true }));
+  camara.ws.send(JSON.stringify({ type: 'cry', crying: false }));
+  await settle();
+
+  assert.deepEqual(notifier.calls, ['joined', 'cry:true', 'cry:false']);
+  await assert.rejects(monitor.next(200), /timeout/);
+});
+
+test('cry messages from a monitor or with a bad payload are ignored', async (t) => {
+  const notifier = spyNotifier();
+  const { client } = await fixture(t, { notifier });
+  const monitor = client('monitor');
+  await monitor.opened;
+  await monitor.next();
+  monitor.ws.send(JSON.stringify({ type: 'cry', crying: true }));
+  const camara = client('camara');
+  await camara.opened;
+  await camara.next();
+  camara.ws.send(JSON.stringify({ type: 'cry', crying: 'yes' }));
+  await settle();
+
+  assert.deepEqual(notifier.calls, ['joined']);
+});

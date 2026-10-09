@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { createRoom, ROLES } from './lib/room.js';
+import { createNotifier, createNtfySender } from './lib/notifier.js';
 
 const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 const MAX_PAYLOAD_BYTES = 64 * 1024;
@@ -99,6 +100,20 @@ function parseRelayable(data) {
   }
 }
 
+function parseCry(data) {
+  try {
+    const message = JSON.parse(data.toString());
+    return message?.type === 'cry' && typeof message.crying === 'boolean' ? message : null;
+  } catch {
+    return null;
+  }
+}
+
+function defaultNotifier() {
+  const { NTFY_URL, NTFY_TOPIC, NTFY_TOKEN } = process.env;
+  return createNotifier({ send: createNtfySender({ url: NTFY_URL, topic: NTFY_TOPIC, token: NTFY_TOKEN }) });
+}
+
 function isForeignOrigin(req) {
   const { origin, host } = req.headers;
   if (origin === undefined) {
@@ -130,7 +145,7 @@ function startHeartbeat(wss, intervalMs) {
   wss.on('close', () => clearInterval(timer));
 }
 
-export function createMonitorServer({ heartbeatMs = HEARTBEAT_MS } = {}) {
+export function createMonitorServer({ heartbeatMs = HEARTBEAT_MS, notifier = defaultNotifier() } = {}) {
   const room = createRoom();
   const server = http.createServer((req, res) => {
     handleRequest(req, res, room).catch((err) => {
@@ -154,13 +169,25 @@ export function createMonitorServer({ heartbeatMs = HEARTBEAT_MS } = {}) {
       return;
     }
     room.join(role, ws);
+    if (role === 'camara') {
+      notifier.cameraJoined();
+    }
     ws.on('message', (data) => {
       const message = parseRelayable(data);
       if (message) {
         room.relay(role, message);
+        return;
+      }
+      const cry = role === 'camara' ? parseCry(data) : null;
+      if (cry) {
+        notifier.cryChanged(cry.crying);
       }
     });
-    ws.on('close', () => room.leave(role, ws));
+    ws.on('close', () => {
+      if (room.leave(role, ws) && role === 'camara') {
+        notifier.cameraLeft();
+      }
+    });
   });
 
   server.on('close', () => wss.close());

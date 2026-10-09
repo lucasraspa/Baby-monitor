@@ -27,6 +27,7 @@ import {
   trackCry,
   monitorStatus,
   fullscreenMode,
+  rmsLevel,
 } from '../public/logic.js';
 
 test('shouldReconnect is false for replaced and invalid-role closes only', () => {
@@ -270,4 +271,17 @@ test('fullscreenMode uses the native API when the element supports it', () => {
 test('fullscreenMode falls back to immersive where only video can go fullscreen (iPhone)', () => {
   assert.equal(fullscreenMode({}), 'immersive');
   assert.equal(fullscreenMode(null), 'immersive');
+});
+
+test('rmsLevel is 0 for silence and for no samples', () => {
+  assert.equal(rmsLevel(new Float32Array(8)), 0);
+  assert.equal(rmsLevel(new Float32Array(0)), 0);
+});
+
+test('rmsLevel of a full-scale square wave is 1', () => {
+  assert.equal(rmsLevel(Float32Array.from([1, -1, 1, -1])), 1);
+});
+
+test('rmsLevel of a half-amplitude square wave is 0.5', () => {
+  assert.equal(rmsLevel(Float32Array.from([0.5, -0.5, 0.5, -0.5])), 0.5);
 });

@@ -6,7 +6,10 @@ import {
   mediaConstraints,
   normalizeFacing,
   otherFacing,
+  initialCryState,
   renegotiationDelayMs,
+  rmsLevel,
+  trackCry,
   videoConstraints,
 } from './logic.js';
 
@@ -15,6 +18,8 @@ const FACING_LABELS = { environment: 'Cámara trasera', user: 'Cámara frontal' 
 const RESTORE_FAILED_TEXT = 'No se pudo recuperar la cámara: recarga la página';
 
 const REPLACED_CLOSE_CODE = 4000;
+const CRY_SAMPLE_MS = 1000;
+const CRY_ANALYSER_FFT = 32768;
 
 const el = (id) => document.getElementById(id);
 const setStatus = (text) => { el('status').textContent = text; };
@@ -25,6 +30,9 @@ let signal = null;
 let retryTimer = null;
 let wakeLock = null;
 let facing = readStoredFacing();
+let audioCtx = null;
+let cryState = initialCryState();
+let cryTimer = null;
 
 function readStoredFacing() {
   try {
@@ -121,6 +129,9 @@ async function handleMessage(message) {
   const peer = pc;
   switch (message.type) {
     case 'welcome':
+      if (cryState.crying) {
+        signal.send({ type: 'cry', crying: true });
+      }
       if (message.peer) {
         await startOffer();
       } else {
@@ -149,12 +160,55 @@ function handleSignalClose(code) {
     return;
   }
   closePeer();
+  clearInterval(cryTimer);
+  cryTimer = null;
+  audioCtx?.close().catch(() => {});
+  audioCtx = null;
   stream?.getTracks().forEach((track) => track.stop());
   stream = null;
   setStatus('Otra cámara está activa — recarga para recuperarla');
 }
 
+function startCryWatch(source) {
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = CRY_ANALYSER_FFT;
+  source.connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  cryTimer = setInterval(() => {
+    audioCtx.resume().catch((err) => console.error('audio resume', err));
+    analyser.getFloatTimeDomainData(samples);
+    const next = trackCry(cryState, rmsLevel(samples));
+    if (next.crying !== cryState.crying) {
+      signal?.send({ type: 'cry', crying: next.crying });
+    }
+    cryState = next;
+  }, CRY_SAMPLE_MS);
+}
+
+function createAudioContext() {
+  // Must run synchronously inside the tap: iOS leaves later-created contexts suspended.
+  try {
+    audioCtx = new AudioContext();
+    audioCtx.resume().catch((err) => console.error('audio resume', err));
+  } catch (err) {
+    console.error('AudioContext no disponible', err);
+    audioCtx = null;
+  }
+}
+
+function setUpCryWatch() {
+  if (!audioCtx) {
+    return;
+  }
+  try {
+    startCryWatch(audioCtx.createMediaStreamSource(stream));
+  } catch (err) {
+    console.error('detección de llanto no disponible', err);
+  }
+}
+
 async function start() {
+  createAudioContext();
   el('start').disabled = true;
   el('error').hidden = true;
   try {
@@ -164,6 +218,8 @@ async function start() {
     el('error').textContent = describeMediaError(err);
     el('error').hidden = false;
     el('start').disabled = false;
+    audioCtx?.close().catch(() => {});
+    audioCtx = null;
     return;
   }
   el('preview').srcObject = stream;
@@ -171,6 +227,7 @@ async function start() {
   el('running').hidden = false;
   await acquireWakeLock();
   signal = connectSignal('camara', { onMessage: serialize(handleMessage), onClose: handleSignalClose });
+  setUpCryWatch();
 }
 
 function showSwitchError(text) {
