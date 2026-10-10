@@ -7,7 +7,11 @@ import {
   normalizeFacing,
   otherFacing,
   initialCryState,
+  levelToMeter,
+  meterToLevel,
+  normalizeGain,
   normalizeThreshold,
+  trackPeak,
   renegotiationDelayMs,
   rmsLevel,
   trackCry,
@@ -20,7 +24,7 @@ const RESTORE_FAILED_TEXT = 'No se pudo recuperar la cámara: recarga la página
 
 const REPLACED_CLOSE_CODE = 4000;
 const THRESHOLD_STORAGE_KEY = 'camara.cryThreshold';
-const METER_FULL_SCALE = 0.3;
+const GAIN_STORAGE_KEY = 'camara.cryGain';
 const CRY_SAMPLE_MS = 1000;
 const CRY_ANALYSER_FFT = 32768;
 
@@ -37,6 +41,9 @@ let audioCtx = null;
 let cryState = initialCryState();
 let cryTimer = null;
 let threshold = readStoredThreshold();
+let gain = readStoredGain();
+let gainNode = null;
+let peakHistory = [];
 
 function readStoredFacing() {
   try {
@@ -70,17 +77,46 @@ function chooseThreshold(value) {
     console.error('localStorage', err);
   }
   renderThreshold();
+renderGain();
 }
 
 function renderThreshold() {
-  el('threshold').value = String(threshold);
+  el('threshold').value = String(levelToMeter(threshold));
   el('threshold-text').textContent = threshold.toFixed(3);
-  el('meter-mark').style.left = `${Math.min(100, (threshold / METER_FULL_SCALE) * 100)}%`;
+  el('meter-mark').style.left = `${levelToMeter(threshold) * 100}%`;
+}
+
+function readStoredGain() {
+  try {
+    return normalizeGain(localStorage.getItem(GAIN_STORAGE_KEY));
+  } catch {
+    return normalizeGain(null);
+  }
+}
+
+function chooseGain(value) {
+  gain = normalizeGain(value);
+  try {
+    localStorage.setItem(GAIN_STORAGE_KEY, String(gain));
+  } catch (err) {
+    console.error('localStorage', err);
+  }
+  if (gainNode) {
+    gainNode.gain.value = gain;
+  }
+  renderGain();
+}
+
+function renderGain() {
+  el('gain').value = String(gain);
+  el('gain-text').textContent = `x${gain.toFixed(1)}`;
 }
 
 function renderLevel(level, crying) {
-  el('meter-fill').style.width = `${Math.min(100, (level / METER_FULL_SCALE) * 100)}%`;
-  el('level-text').textContent = `Nivel ${level.toFixed(3)}`;
+  const tracked = trackPeak(peakHistory, level, Date.now());
+  peakHistory = tracked.history;
+  el('meter-fill').style.width = `${levelToMeter(level) * 100}%`;
+  el('level-text').textContent = `Nivel ${level.toFixed(3)} · pico 30 s ${tracked.peak.toFixed(3)}`;
   el('cry-text').textContent = crying ? 'LLANTO' : 'Sin llanto';
 }
 
@@ -209,7 +245,10 @@ function handleSignalClose(code) {
 function startCryWatch(source) {
   const analyser = audioCtx.createAnalyser();
   analyser.fftSize = CRY_ANALYSER_FFT;
-  source.connect(analyser);
+  gainNode = audioCtx.createGain();
+  gainNode.gain.value = gain;
+  source.connect(gainNode);
+  gainNode.connect(analyser);
   const samples = new Float32Array(analyser.fftSize);
   cryTimer = setInterval(() => {
     audioCtx.resume().catch((err) => console.error('audio resume', err));
@@ -354,6 +393,8 @@ el('switch').addEventListener('click', switchCamera);
 document.querySelectorAll('[data-facing]').forEach((button) => {
   button.addEventListener('click', () => chooseFacing(button.dataset.facing));
 });
-el('threshold').addEventListener('input', (event) => chooseThreshold(event.target.value));
+el('threshold').addEventListener('input', (event) => chooseThreshold(meterToLevel(Number(event.target.value))));
+el('gain').addEventListener('input', (event) => chooseGain(event.target.value));
 renderFacing();
 renderThreshold();
+renderGain();

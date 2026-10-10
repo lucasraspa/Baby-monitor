@@ -31,6 +31,14 @@ import {
   CRY_THRESHOLD_MIN,
   CRY_THRESHOLD_MAX,
   normalizeThreshold,
+  CRY_GAIN_MIN,
+  CRY_GAIN_MAX,
+  CRY_GAIN_DEFAULT,
+  normalizeGain,
+  levelToMeter,
+  meterToLevel,
+  trackPeak,
+  PEAK_WINDOW_MS,
 } from '../public/logic.js';
 
 test('shouldReconnect is false for replaced and invalid-role closes only', () => {
@@ -311,4 +319,51 @@ test('rmsLevel of a full-scale square wave is 1', () => {
 
 test('rmsLevel of a half-amplitude square wave is 0.5', () => {
   assert.equal(rmsLevel(Float32Array.from([0.5, -0.5, 0.5, -0.5])), 0.5);
+});
+
+test('CRY_THRESHOLD_MIN is low enough for a distant cry', () => {
+  assert.equal(CRY_THRESHOLD_MIN, 0.001);
+});
+
+test('normalizeGain clamps and falls back to the default', () => {
+  assert.equal(normalizeGain('4'), 4);
+  assert.equal(normalizeGain(0), CRY_GAIN_MIN);
+  assert.equal(normalizeGain(500), CRY_GAIN_MAX);
+  assert.equal(normalizeGain('abc'), CRY_GAIN_DEFAULT);
+  assert.equal(normalizeGain(null), CRY_GAIN_DEFAULT);
+});
+
+test('levelToMeter maps silence to 0 and the full scale to 1', () => {
+  assert.equal(levelToMeter(0), 0);
+  assert.equal(levelToMeter(0.3), 1);
+  assert.equal(levelToMeter(5), 1);
+});
+
+test('levelToMeter gives quiet levels visible room on the bar', () => {
+  assert.ok(levelToMeter(0.005) > 0.3);
+  assert.ok(levelToMeter(0.01) > levelToMeter(0.005));
+});
+
+test('meterToLevel inverts levelToMeter', () => {
+  for (const level of [0.001, 0.01, 0.05, 0.3]) {
+    assert.ok(Math.abs(meterToLevel(levelToMeter(level)) - level) < 1e-9);
+  }
+});
+
+test('trackPeak reports the loudest level inside the window and does not mutate', () => {
+  const first = trackPeak([], 0.02, 1000);
+  const second = trackPeak(first.history, 0.08, 2000);
+  const third = trackPeak(second.history, 0.01, 3000);
+
+  assert.equal(first.history.length, 1);
+  assert.equal(third.peak, 0.08);
+  assert.equal(second.history.length, 2);
+});
+
+test('trackPeak forgets samples older than the window', () => {
+  const old = trackPeak([], 0.2, 1000);
+  const later = trackPeak(old.history, 0.01, 1000 + PEAK_WINDOW_MS + 1);
+
+  assert.equal(later.peak, 0.01);
+  assert.equal(later.history.length, 1);
 });

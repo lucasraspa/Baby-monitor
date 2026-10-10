@@ -127,11 +127,18 @@ export function applyAudioSessionType(nav, type) {
 
 // Llanto: nivel RMS (0..1) del micrófono del iPad, muestreado cada tick de 1 s.
 export const CRY_LEVEL = 0.05;
-export const CRY_THRESHOLD_MIN = 0.005;
+export const CRY_THRESHOLD_MIN = 0.001;
 export const CRY_THRESHOLD_MAX = 0.3;
 export const CRY_WINDOW = 6;
 export const CRY_MIN_LOUD = 4;
 export const CRY_CLEAR_QUIET = 10;
+
+export const CRY_GAIN_MIN = 1;
+export const CRY_GAIN_MAX = 20;
+export const CRY_GAIN_DEFAULT = 1;
+export const METER_MIN_LEVEL = 0.0005;
+export const METER_MAX_LEVEL = CRY_THRESHOLD_MAX;
+export const PEAK_WINDOW_MS = 30000;
 
 export function initialCryState() {
   return { levels: [], quietTicks: 0, crying: false };
@@ -178,4 +185,32 @@ export function rmsLevel(samples) {
     sum += sample * sample;
   }
   return Math.sqrt(sum / samples.length);
+}
+
+export function normalizeGain(value) {
+  const number = Number(value);
+  if (value === null || value === undefined || String(value).trim() === '' || !Number.isFinite(number)) {
+    return CRY_GAIN_DEFAULT;
+  }
+  return Math.min(CRY_GAIN_MAX, Math.max(CRY_GAIN_MIN, number));
+}
+
+// Escala logarítmica: un llanto lejano (0.002–0.02) sigue viéndose en la barra.
+const METER_SPAN = Math.log10(METER_MAX_LEVEL / METER_MIN_LEVEL);
+
+export function levelToMeter(level) {
+  if (!(level > METER_MIN_LEVEL)) {
+    return 0;
+  }
+  return Math.min(1, Math.log10(level / METER_MIN_LEVEL) / METER_SPAN);
+}
+
+export function meterToLevel(position) {
+  const clamped = Math.min(1, Math.max(0, position));
+  return METER_MIN_LEVEL * 10 ** (clamped * METER_SPAN);
+}
+
+export function trackPeak(history, level, now, windowMs = PEAK_WINDOW_MS) {
+  const kept = [...history, { level, at: now }].filter((entry) => now - entry.at <= windowMs);
+  return { history: kept, peak: Math.max(...kept.map((entry) => entry.level)) };
 }
